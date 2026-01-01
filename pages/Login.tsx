@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserRole } from '../types.ts';
-import { Button, Input, Card } from '../components/UI.tsx';
+import { Button, Input } from '../components/UI.tsx';
 import { messStore } from '../store/messStore.ts';
-import { useNavigate } from 'react-router-dom';
+import { supabase } from '../services/supabaseClient.ts';
+import { Loader2, Wifi, WifiOff, Database } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (role: UserRole, id: string, name: string) => void;
@@ -13,34 +14,91 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [identifier, setIdentifier] = useState(''); // Email or Phone
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(false);
+  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'offline'>('checking');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Pre-load data on mount to minimize waiting time and check connection
+  useEffect(() => {
+    const checkDb = async () => {
+      await messStore.init();
+      setDbStatus(messStore.isSupabaseConfigured ? 'connected' : 'offline');
+    };
+    checkDb();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
 
-    if (role === UserRole.ADMIN) {
-      if (identifier === 'admin@messpro.com' && password === 'admin') {
-        onLogin(UserRole.ADMIN, 'admin', 'Mess Administrator');
-        navigate('/');
-      } else {
-        setError('Invalid Admin Credentials (Try: admin@messpro.com / admin)');
-      }
-    } else {
-      // Student Login - By Phone
-      const student = messStore.students.find(s => s.phone === identifier);
-      if (student) {
-        onLogin(UserRole.STUDENT, student.id, student.name);
-        navigate('/');
-      } else {
-        setError('Phone number not found in registry.');
-      }
+    try {
+        if (role === UserRole.ADMIN) {
+            // 1. Check Hardcoded Demo Credentials
+            if (identifier === 'admin@messpro.com' && password === 'admin') {
+                onLogin(UserRole.ADMIN, 'admin', 'Mess Administrator');
+                window.location.hash = '/';
+                return;
+            }
+
+            // 2. Check Supabase (if connected)
+            if (messStore.isSupabaseConfigured) {
+                // A. Try Standard Supabase Auth (Users)
+                const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+                    email: identifier,
+                    password: password
+                });
+
+                if (!authError && authData.user) {
+                    onLogin(UserRole.ADMIN, authData.user.id, authData.user.email || 'Admin');
+                    window.location.hash = '/';
+                    return;
+                }
+
+                // B. Try custom 'admins' table (Fallback for manually inserted rows)
+                try {
+                    const { data: tableData, error: tableError } = await supabase
+                        .from('admins')
+                        .select('*')
+                        .eq('email', identifier)
+                        .maybeSingle();
+
+                    // Note: This checks strictly if you added a column 'password' with plain text.
+                    if (!tableError && tableData && tableData.password === password) {
+                         onLogin(UserRole.ADMIN, tableData.id.toString(), tableData.name || 'Admin');
+                         window.location.hash = '/';
+                         return;
+                    }
+                } catch (err) {
+                    // Ignore errors if table doesn't exist
+                }
+            }
+
+            setError('Invalid Email or Password.');
+        } else {
+            // Student Login Logic
+            await messStore.init();
+
+            // Sanitize input (remove spaces, match string types)
+            const cleanPhone = identifier.trim();
+            const student = messStore.students.find(s => String(s.phone).trim() === cleanPhone);
+
+            if (student) {
+                onLogin(UserRole.STUDENT, student.id, student.name);
+                window.location.hash = '/';
+            } else {
+                if (messStore.students.length === 0 && dbStatus === 'connected') {
+                     setError('Registry is empty. Please ask Admin to add students via dashboard.');
+                } else {
+                     setError(`Phone number "${cleanPhone}" not found.`);
+                }
+            }
+        }
+    } catch (err) {
+        console.error(err);
+        setError("An unexpected error occurred. Please try again.");
+    } finally {
+        setIsLoading(false);
     }
-  };
-
-  const handleQuickAdminLogin = () => {
-    onLogin(UserRole.ADMIN, 'admin', 'Mess Administrator');
-    navigate('/');
   };
 
   return (
@@ -51,8 +109,24 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
          <div className="absolute top-[40%] -left-[10%] w-[40%] h-[40%] bg-indigo-500/5 rounded-full blur-3xl"></div>
       </div>
 
+      {/* Connection Status Indicator */}
+      <div className={`absolute top-6 right-6 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border shadow-sm transition-all z-20 ${
+           dbStatus === 'checking' ? 'bg-white text-slate-500 border-slate-200' :
+           dbStatus === 'connected' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+           'bg-amber-50 text-amber-700 border-amber-200'
+       }`}>
+           {dbStatus === 'checking' && <Loader2 size={12} className="animate-spin" />}
+           {dbStatus === 'connected' && <Wifi size={14} />}
+           {dbStatus === 'offline' && <WifiOff size={14} />}
+           <span>
+               {dbStatus === 'checking' ? 'Connecting...' :
+                dbStatus === 'connected' ? 'System Online' :
+                'Demo Mode'}
+           </span>
+       </div>
+
       <div className="w-full max-w-md relative z-10">
-        <div className="text-center mb-10">
+        <div className="text-center mb-8">
            <div className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-3xl mx-auto flex items-center justify-center mb-6 shadow-xl shadow-indigo-300 transform rotate-3 hover:rotate-6 transition-transform">
             <span className="text-white text-4xl font-bold">M</span>
           </div>
@@ -61,9 +135,23 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </div>
 
         <div className="bg-white p-8 rounded-3xl shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] border border-slate-100">
+          
+          {/* Offline Warning Banner inside card */}
+          {dbStatus === 'offline' && (
+             <div className="mb-6 bg-amber-50 border border-amber-100 p-3 rounded-xl flex items-start gap-3 animate-fade-in">
+                 <div className="bg-amber-100 p-1.5 rounded-lg text-amber-600 shrink-0">
+                    <Database size={16} />
+                 </div>
+                 <div className="text-xs text-amber-800 leading-relaxed">
+                     <span className="font-bold block text-amber-900 mb-0.5">Database Unreachable</span>
+                     Running in local demo mode. Changes are saved to browser storage only.
+                 </div>
+             </div>
+          )}
+
           <div className="flex p-1 bg-slate-50 rounded-xl mb-8 border border-slate-100">
             <button
-              onClick={() => setRole(UserRole.ADMIN)}
+              onClick={() => { setRole(UserRole.ADMIN); setError(''); }}
               className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${
                 role === UserRole.ADMIN ? 'bg-white shadow-sm text-indigo-700 ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'
               }`}
@@ -71,7 +159,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               Admin
             </button>
             <button
-              onClick={() => setRole(UserRole.STUDENT)}
+              onClick={() => { setRole(UserRole.STUDENT); setError(''); }}
               className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${
                 role === UserRole.STUDENT ? 'bg-white shadow-sm text-indigo-700 ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'
               }`}
@@ -84,7 +172,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <Input
               label={role === UserRole.ADMIN ? "Email Address" : "Registered Phone"}
               type={role === UserRole.ADMIN ? "email" : "tel"}
-              placeholder={role === UserRole.ADMIN ? "admin@messpro.com" : "9876543210"}
+              placeholder={role === UserRole.ADMIN ? "name@example.com" : "10-digit mobile number"}
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               required
@@ -108,31 +196,17 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </div>
             )}
 
-            <Button type="submit" className="w-full text-base py-3">
-              {role === UserRole.ADMIN ? 'Sign In' : 'Access Portal'}
+            <Button type="submit" className="w-full text-base py-3" disabled={isLoading}>
+              {isLoading ? (
+                  <div className="flex items-center justify-center space-x-2">
+                      <Loader2 size={20} className="animate-spin" />
+                      <span>Verifying...</span>
+                  </div>
+              ) : (
+                  role === UserRole.ADMIN ? 'Sign In' : 'Access Portal'
+              )}
             </Button>
           </form>
-
-          {role === UserRole.ADMIN && (
-            <div className="mt-8">
-               <div className="relative flex py-2 items-center">
-                  <div className="flex-grow border-t border-slate-100"></div>
-                  <span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-semibold uppercase tracking-wider">Test Account</span>
-                  <div className="flex-grow border-t border-slate-100"></div>
-               </div>
-               <Button 
-                 type="button" 
-                 variant="secondary" 
-                 className="w-full text-xs py-2.5 mt-2 border-dashed" 
-                 onClick={handleQuickAdminLogin}
-               >
-                 ⚡ Quick Demo Login
-               </Button>
-            </div>
-          )}
-          {role === UserRole.STUDENT && (
-             <p className="text-xs text-center text-slate-400 mt-6 bg-slate-50 py-2 rounded-lg border border-slate-100">Demo Phone: <span className="font-mono font-semibold text-slate-600">9876543210</span></p>
-          )}
         </div>
       </div>
     </div>

@@ -1,5 +1,4 @@
 import React from 'react';
-import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Users, CreditCard, LogOut, UserCircle, Utensils, ChevronRight } from 'lucide-react';
 import { CurrentUser, UserRole } from '../types.ts';
 
@@ -10,7 +9,8 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
-  const location = useLocation();
+  // Derive current path from window location hash for active state
+  const currentPath = window.location.hash.replace(/^#/, '') || '/';
 
   if (!user) {
     return <>{children}</>;
@@ -31,7 +31,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
 
   const links = isAdmin ? adminLinks : studentLinks;
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) => currentPath === path;
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50/50 font-sans text-slate-900">
@@ -50,9 +50,9 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         <nav className="flex-1 px-4 space-y-1.5 py-4">
           <p className="px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Menu</p>
           {links.map((link) => (
-            <Link
+            <a
               key={link.path}
-              to={link.path}
+              href={`#${link.path}`}
               className={`group flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 ${
                 isActive(link.path)
                   ? 'bg-indigo-50 text-indigo-700 font-semibold shadow-sm'
@@ -64,7 +64,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
                 <span>{link.name}</span>
               </div>
               {isActive(link.path) && <ChevronRight size={16} className="text-indigo-400" />}
-            </Link>
+            </a>
           ))}
         </nav>
 
@@ -113,16 +113,16 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
       {/* Mobile Bottom Nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-2 z-20 safe-area-pb shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
         {links.map((link) => (
-          <Link
+          <a
             key={link.path}
-            to={link.path}
+            href={`#${link.path}`}
             className={`flex flex-col items-center p-2 rounded-xl w-16 ${
               isActive(link.path) ? 'text-indigo-600 bg-indigo-50' : 'text-slate-400'
             }`}
           >
             <link.icon size={22} />
             <span className="text-[10px] mt-1 font-semibold">{link.name}</span>
-          </Link>
+          </a>
         ))}
       </nav>
     </div>

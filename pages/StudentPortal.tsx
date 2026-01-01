@@ -36,6 +36,10 @@ const StudentPortal: React.FC<StudentPortalProps> = ({ user }) => {
   }, [balance, refreshKey]);
 
   const handlePayment = async () => {
+    // Payment Logic temporarily disabled
+    return;
+
+    /* 
     setErrorMessage('');
     const amount = parseFloat(payAmount);
 
@@ -77,26 +81,46 @@ const StudentPortal: React.FC<StudentPortalProps> = ({ user }) => {
         }
       }
     });
+    */
   };
 
-  // Calculate days remaining in active plan
-  const daysRemaining = activeAssignment 
-    ? Math.ceil((new Date(activeAssignment.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-    : 0;
+  // Helper to calculate days remaining safely
+  const getDaysRemaining = (endDateStr: string) => {
+    const end = new Date(endDateStr);
+    const today = new Date();
+    // Normalize to midnight to compare just dates
+    end.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    
+    const diffTime = end.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const daysRemaining = activeAssignment ? getDaysRemaining(activeAssignment.end_date) : -999;
+  // Show warning if 2 days or less remain AND strictly not expired (days >= 0)
+  const showExpiryWarning = activeAssignment && daysRemaining <= 2 && daysRemaining >= 0;
 
   return (
     <div className="space-y-6">
       {/* Expiry Warning Banner */}
-      {activeAssignment && daysRemaining <= 2 && daysRemaining > 0 && (
+      {showExpiryWarning && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-4 shadow-sm animate-fade-in relative overflow-hidden">
            <div className="absolute top-0 right-0 -mt-2 -mr-2 w-16 h-16 bg-amber-100 rounded-full blur-xl opacity-50"></div>
            <div className="p-2.5 bg-white rounded-xl text-amber-600 shadow-sm border border-amber-100 shrink-0 z-10">
              <AlertTriangle size={24} />
            </div>
            <div className="z-10">
-             <h4 className="font-bold text-amber-900 text-lg">Plan Expiring Soon!</h4>
+             <h4 className="font-bold text-amber-900 text-lg">
+               {daysRemaining === 0 ? 'Plan Expires Today!' : 'Plan Expiring Soon!'}
+             </h4>
              <p className="text-sm text-amber-800 mt-1 font-medium">
-               Your current meal plan expires in <span className="font-bold underline decoration-amber-500/50">{daysRemaining} day{daysRemaining > 1 ? 's' : ''}</span>. 
+               Your current meal plan expires 
+               {daysRemaining === 0 
+                  ? <span className="font-bold"> today</span> 
+                  : daysRemaining === 1 
+                    ? <span className="font-bold"> tomorrow</span>
+                    : <span> in <span className="font-bold underline decoration-amber-500/50">{daysRemaining} days</span></span>
+               }. 
                Please ensure your wallet is topped up to continue enjoying your meals.
              </p>
            </div>
@@ -128,21 +152,18 @@ const StudentPortal: React.FC<StudentPortalProps> = ({ user }) => {
                       type="number" 
                       value={payAmount} 
                       onChange={e => setPayAmount(e.target.value)} 
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold"
+                      disabled={true}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white/50 cursor-not-allowed focus:ring-0 focus:border-slate-700 font-bold"
                      />
                    </div>
                    <div className="flex items-end">
                      <Button 
-                      variant="primary" 
+                      variant="secondary" 
                       onClick={handlePayment} 
-                      disabled={isProcessing}
-                      className="h-[42px] px-6 shadow-[0_0_20px_rgba(79,70,229,0.3)] relative overflow-hidden"
+                      disabled={true}
+                      className="h-[42px] px-6 bg-slate-700 border-slate-600 text-slate-400 cursor-not-allowed shadow-none"
                      >
-                       {isProcessing ? (
-                         <span className="animate-pulse">Processing...</span>
-                       ) : (
-                         <>Pay Now <ArrowUpRight size={18} /></>
-                       )}
+                        <span>Payments Disabled</span>
                      </Button>
                    </div>
                  </div>
@@ -183,12 +204,12 @@ const StudentPortal: React.FC<StudentPortalProps> = ({ user }) => {
                     Valid until {formatDate(activeAssignment.end_date)}
                   </p>
                   
-                  {daysRemaining > 0 && (
+                  {daysRemaining >= 0 && (
                      <div className="mt-6">
                         <div className="flex justify-between text-xs font-medium text-slate-500 mb-1">
                           <span>Progress</span>
                           <span className={daysRemaining <= 2 ? 'text-amber-600 font-bold' : ''}>
-                             {daysRemaining} days left
+                             {daysRemaining === 0 ? 'Last Day' : `${daysRemaining} days left`}
                           </span>
                         </div>
                         <div className="w-full bg-slate-100 rounded-full h-2">

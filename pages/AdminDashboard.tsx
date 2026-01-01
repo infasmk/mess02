@@ -11,8 +11,11 @@ const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate async data load
-    const load = () => {
+    const load = async () => {
+      // Ensure Supabase data is loaded if refreshed directly on dashboard
+      if (messStore.isLoading) {
+        await messStore.init();
+      }
       setStats(messStore.getStats());
       setOverdueStudents(messStore.getStudentsWithDues().filter(s => s.balance > 0));
       setLoading(false);
@@ -20,11 +23,11 @@ const AdminDashboard: React.FC = () => {
     load();
   }, []);
 
-  const handleWhatsAppReminder = (student: Student & { balance: number }) => {
+  const handleWhatsAppReminder = async (student: Student & { balance: number }) => {
     const message = `Hello ${student.name}, this is a gentle reminder from the Mess Admin. You have a pending due of ${formatCurrency(student.balance)}. Please pay at the earliest to avoid service interruption.`;
     const url = `https://wa.me/91${student.phone}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
-    messStore.updateLastReminder(student.id);
+    await messStore.updateLastReminder(student.id);
     setOverdueStudents([...messStore.getStudentsWithDues().filter(s => s.balance > 0)]);
   };
 

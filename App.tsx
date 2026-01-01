@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout.tsx';
 import Login from './pages/Login.tsx';
 import AdminDashboard from './pages/AdminDashboard.tsx';
@@ -10,6 +9,25 @@ import { CurrentUser, UserRole } from './types.ts';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<CurrentUser | null>(null);
+  const [currentPath, setCurrentPath] = useState(window.location.hash.replace(/^#/, '') || '/');
+
+  // Handle Hash Navigation
+  useEffect(() => {
+    const handleHashChange = () => {
+      let path = window.location.hash.replace(/^#/, '');
+      if (path === '') path = '/';
+      setCurrentPath(path);
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    // Initial check
+    if (window.location.hash === '') {
+      // Ensure we have a hash if none exists, but respecting current path if it was empty
+    }
+    handleHashChange();
+
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   // Persistence check for session
   useEffect(() => {
@@ -18,6 +36,19 @@ const App: React.FC = () => {
       setUser(JSON.parse(session));
     }
   }, []);
+
+  // Auth Redirect Logic
+  useEffect(() => {
+    if (!user) {
+      if (currentPath !== '/login') {
+        window.location.hash = '/login';
+      }
+    } else {
+      if (currentPath === '/login') {
+        window.location.hash = '/';
+      }
+    }
+  }, [user, currentPath]);
 
   const handleLogin = (role: UserRole, id: string, name: string) => {
     const newUser = { role, id, name };
@@ -28,45 +59,36 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('messProSession');
+    window.location.hash = '/login';
   };
 
+  const renderPage = () => {
+    if (user?.role === UserRole.ADMIN) {
+      switch (currentPath) {
+        case '/': return <AdminDashboard />;
+        case '/residents': return <Residents />;
+        case '/plans': return <Plans />;
+        default: return <AdminDashboard />;
+      }
+    } else if (user?.role === UserRole.STUDENT) {
+      switch (currentPath) {
+        case '/': return <StudentPortal user={user} />;
+        case '/history': return <StudentPortal user={user} />;
+        default: return <StudentPortal user={user} />;
+      }
+    }
+    return null;
+  };
+
+  if (!user) {
+    // Only render login if path matches to avoid flicker during redirect
+    return currentPath === '/login' ? <Login onLogin={handleLogin} /> : null;
+  }
+
   return (
-    <HashRouter>
-      <Routes>
-        <Route path="/login" element={
-          !user ? <Login onLogin={handleLogin} /> : <Navigate to="/" replace />
-        } />
-        
-        <Route path="/*" element={
-          user ? (
-            <Layout user={user} onLogout={handleLogout}>
-              <Routes>
-                {/* Admin Routes */}
-                {user.role === UserRole.ADMIN && (
-                  <>
-                    <Route path="/" element={<AdminDashboard />} />
-                    <Route path="/residents" element={<Residents />} />
-                    <Route path="/plans" element={<Plans />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </>
-                )}
-                
-                {/* Student Routes */}
-                {user.role === UserRole.STUDENT && (
-                  <>
-                    <Route path="/" element={<StudentPortal user={user} />} />
-                    <Route path="/history" element={<StudentPortal user={user} />} /> {/* Reuse for now */}
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </>
-                )}
-              </Routes>
-            </Layout>
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        } />
-      </Routes>
-    </HashRouter>
+    <Layout user={user} onLogout={handleLogout}>
+      {renderPage()}
+    </Layout>
   );
 };
 

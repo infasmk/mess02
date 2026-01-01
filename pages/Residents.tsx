@@ -1,18 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { messStore } from '../store/messStore.ts';
 import { Student } from '../types.ts';
 import { Card, Button, Input, Modal, Select, Badge, DateRangePicker } from '../components/UI.tsx';
 import { formatCurrency, calculateProratedCharge } from '../utils/helpers.ts';
-import { Search, UserPlus, CreditCard, Calendar, User, Phone, AlertCircle, Clock } from 'lucide-react';
+import { Search, UserPlus, CreditCard, Calendar, Phone, AlertCircle, Clock, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 
 const Residents: React.FC = () => {
-  const [students, setStudents] = useState(messStore.getStudentsWithDues());
+  const [students, setStudents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Modal States
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
   const [isAssignPlanOpen, setIsAssignPlanOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
   // Form States
@@ -20,6 +22,21 @@ const Residents: React.FC = () => {
   const [planForm, setPlanForm] = useState({ planId: '', startDate: '', endDate: '' });
   const [paymentForm, setPaymentForm] = useState({ amount: '', mode: 'cash' });
   const [assignmentError, setAssignmentError] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [isActionLoading, setIsActionLoading] = useState(false);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    // Ensure store is ready
+    if (messStore.isLoading) {
+       await messStore.init(); 
+    }
+    setStudents(messStore.getStudentsWithDues());
+    setLoading(false);
+  };
 
   const refreshData = () => {
     setStudents(messStore.getStudentsWithDues());
@@ -31,15 +48,22 @@ const Residents: React.FC = () => {
     s.phone.includes(searchTerm)
   );
 
-  const handleAddStudent = (e: React.FormEvent) => {
+  const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    messStore.addStudent(newStudent);
-    setIsAddStudentOpen(false);
-    setNewStudent({ name: '', phone: '', room: '' });
-    refreshData();
+    setIsActionLoading(true);
+    try {
+      await messStore.addStudent(newStudent);
+      setIsAddStudentOpen(false);
+      setNewStudent({ name: '', phone: '', room: '' });
+      refreshData();
+    } catch (err: any) {
+      alert("Failed to add resident: " + err.message);
+    } finally {
+      setIsActionLoading(false);
+    }
   };
 
-  const handleAssignPlan = (e: React.FormEvent) => {
+  const handleAssignPlan = async (e: React.FormEvent) => {
     e.preventDefault();
     setAssignmentError('');
 
@@ -54,28 +78,64 @@ const Residents: React.FC = () => {
     }
 
     if (selectedStudent && planForm.planId) {
+      setIsActionLoading(true);
       try {
-        messStore.assignPlan(selectedStudent.id, planForm.planId, planForm.startDate, planForm.endDate);
+        await messStore.assignPlan(selectedStudent.id, planForm.planId, planForm.startDate, planForm.endDate);
         setIsAssignPlanOpen(false);
         refreshData();
       } catch (err: any) {
         setAssignmentError(err.message || "Failed to assign plan.");
+      } finally {
+        setIsActionLoading(false);
       }
     }
   };
 
-  const handleRecordPayment = (e: React.FormEvent) => {
+  const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedStudent && paymentForm.amount) {
-      messStore.recordPayment({
-        student_id: selectedStudent.id,
-        amount: parseFloat(paymentForm.amount),
-        date: new Date().toISOString(),
-        mode: paymentForm.mode as any,
-      });
-      setIsPaymentOpen(false);
-      setPaymentForm({ amount: '', mode: 'cash' });
-      refreshData();
+      setIsActionLoading(true);
+      try {
+        await messStore.recordPayment({
+          student_id: selectedStudent.id,
+          amount: parseFloat(paymentForm.amount),
+          date: new Date().toISOString(),
+          mode: paymentForm.mode as any,
+        });
+        setIsPaymentOpen(false);
+        setPaymentForm({ amount: '', mode: 'cash' });
+        refreshData();
+      } catch (err: any) {
+        alert("Failed to record payment: " + err.message);
+      } finally {
+        setIsActionLoading(false);
+      }
+    }
+  };
+
+  const handleDeleteClick = (student: Student & { balance: number }) => {
+    if (student.balance > 0) {
+      alert(`Cannot delete ${student.name}. They have pending dues of ${formatCurrency(student.balance)}. Please clear dues first.`);
+      return;
+    }
+    setSelectedStudent(student);
+    setDeleteError('');
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (selectedStudent) {
+      setIsActionLoading(true);
+      try {
+        await messStore.deleteStudent(selectedStudent.id);
+        setIsDeleteConfirmOpen(false);
+        setSelectedStudent(null);
+        refreshData();
+      } catch (err: any) {
+        setDeleteError(err.message);
+      } finally {
+        setIsActionLoading(false);
+      }
     }
   };
 
@@ -116,11 +176,19 @@ const Residents: React.FC = () => {
 
   const estimatedCharge = planForm.planId && planForm.startDate && planForm.endDate
     ? calculateProratedCharge(
-        messStore.plans.find(p => p.id === planForm.planId)!.monthly_price,
+        (messStore.plans.find(p => p.id === planForm.planId) || {monthly_price: 0}).monthly_price,
         planForm.startDate,
         planForm.endDate
       )
     : 0;
+
+  if (loading) {
+    return (
+       <div className="flex items-center justify-center h-64">
+         <Loader2 className="animate-spin text-indigo-600" size={32} />
+       </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -146,47 +214,66 @@ const Residents: React.FC = () => {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filteredStudents.map(student => (
-          <Card key={student.id} className="p-0 flex flex-col h-full hover:-translate-y-1 transition-transform duration-300">
-            <div className="p-5 flex justify-between items-start">
-              <div className="flex gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-lg border border-slate-200">
-                  {student.name.charAt(0)}
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-lg leading-tight">{student.name}</h3>
-                  <div className="flex items-center text-xs font-medium text-slate-500 mt-1 space-x-2">
-                     <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 border border-slate-200">Room {student.room}</span>
-                     <span className="flex items-center text-slate-400"><Phone size={10} className="mr-0.5" />{student.phone}</span>
+      {filteredStudents.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-3xl border border-slate-200 border-dashed">
+           <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+             <UserPlus size={24} />
+           </div>
+           <h3 className="text-lg font-bold text-slate-700">No Residents Found</h3>
+           <p className="text-slate-500 text-sm mt-1">Add a new resident to get started.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredStudents.map(student => (
+            <Card key={student.id} className="p-0 flex flex-col h-full hover:-translate-y-1 transition-transform duration-300">
+              <div className="p-5 flex justify-between items-start">
+                <div className="flex gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-lg border border-slate-200">
+                    {student.name.charAt(0)}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-lg leading-tight">{student.name}</h3>
+                    <div className="flex items-center text-xs font-medium text-slate-500 mt-1 space-x-2">
+                      <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 border border-slate-200">Room {student.room}</span>
+                      <span className="flex items-center text-slate-400"><Phone size={10} className="mr-0.5" />{student.phone}</span>
+                    </div>
                   </div>
                 </div>
+                <div className="flex flex-col gap-1 items-end">
+                  <Badge status={student.status} />
+                  <button 
+                    onClick={() => handleDeleteClick(student)}
+                    className="text-slate-300 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg transition-colors mt-1"
+                    title="Delete Resident"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
-              <Badge status={student.status} />
-            </div>
-            
-            <div className="mt-auto">
-              <div className="px-5 py-3 bg-slate-50/50 border-y border-slate-100 flex justify-between items-center">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Current Due</span>
-                <span className={`text-lg font-bold ${student.balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                  {formatCurrency(student.balance)}
-                </span>
-              </div>
+              
+              <div className="mt-auto">
+                <div className="px-5 py-3 bg-slate-50/50 border-y border-slate-100 flex justify-between items-center">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Current Due</span>
+                  <span className={`text-lg font-bold ${student.balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {formatCurrency(student.balance)}
+                  </span>
+                </div>
 
-              <div className="p-3 flex gap-3 bg-white">
-                <Button variant="secondary" className="flex-1 text-sm py-2" onClick={() => openAssignPlan(student)}>
-                  <Calendar size={16} />
-                  <span>Plan</span>
-                </Button>
-                <Button variant="outline" className="flex-1 text-sm py-2" onClick={() => openPayment(student)}>
-                  <CreditCard size={16} />
-                  <span>Pay</span>
-                </Button>
+                <div className="p-3 flex gap-3 bg-white">
+                  <Button variant="secondary" className="flex-1 text-sm py-2" onClick={() => openAssignPlan(student)}>
+                    <Calendar size={16} />
+                    <span>Plan</span>
+                  </Button>
+                  <Button variant="outline" className="flex-1 text-sm py-2" onClick={() => openPayment(student)}>
+                    <CreditCard size={16} />
+                    <span>Pay</span>
+                  </Button>
+                </div>
               </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* --- MODALS --- */}
       <Modal isOpen={isAddStudentOpen} onClose={() => setIsAddStudentOpen(false)} title="Register New Resident">
@@ -194,7 +281,9 @@ const Residents: React.FC = () => {
           <Input label="Full Name" value={newStudent.name} onChange={e => setNewStudent({...newStudent, name: e.target.value})} required placeholder="e.g. John Doe" />
           <Input label="Phone Number" type="tel" value={newStudent.phone} onChange={e => setNewStudent({...newStudent, phone: e.target.value})} required placeholder="10-digit mobile number" />
           <Input label="Room Number" value={newStudent.room} onChange={e => setNewStudent({...newStudent, room: e.target.value})} required placeholder="e.g. A-101" />
-          <Button type="submit" className="w-full mt-2">Register Resident</Button>
+          <Button type="submit" className="w-full mt-2" disabled={isActionLoading}>
+            {isActionLoading ? 'Saving...' : 'Register Resident'}
+          </Button>
         </form>
       </Modal>
 
@@ -253,7 +342,9 @@ const Residents: React.FC = () => {
              </div>
           </div>
 
-          <Button type="submit" className="w-full" disabled={!planForm.startDate || !planForm.endDate}>Confirm Assignment</Button>
+          <Button type="submit" className="w-full" disabled={!planForm.startDate || !planForm.endDate || isActionLoading}>
+            {isActionLoading ? 'Processing...' : 'Confirm Assignment'}
+          </Button>
         </form>
       </Modal>
 
@@ -280,8 +371,41 @@ const Residents: React.FC = () => {
             <option value="bank_transfer">Bank Transfer</option>
           </Select>
 
-          <Button type="submit" className="w-full" variant="success">Record Payment</Button>
+          <Button type="submit" className="w-full" variant="success" disabled={isActionLoading}>
+            {isActionLoading ? 'Recording...' : 'Record Payment'}
+          </Button>
         </form>
+      </Modal>
+
+      <Modal isOpen={isDeleteConfirmOpen} onClose={() => setIsDeleteConfirmOpen(false)} title="Confirm Deletion">
+        <div className="space-y-4">
+          <div className="bg-rose-50 p-4 rounded-xl border border-rose-100 flex gap-3 items-start">
+             <div className="p-2 bg-white rounded-full text-rose-600 shadow-sm shrink-0">
+               <AlertTriangle size={20} />
+             </div>
+             <div>
+               <h4 className="font-bold text-rose-800">Delete Resident?</h4>
+               <p className="text-sm text-rose-700 mt-1">
+                 Are you sure you want to delete <span className="font-bold">{selectedStudent?.name}</span>? 
+               </p>
+               <p className="text-xs text-rose-600 mt-2 font-medium">
+                 This will remove them from the residents directory. <br/>
+                 <span className="underline decoration-rose-400">Payment history will be preserved</span>, but future access will be revoked.
+               </p>
+             </div>
+          </div>
+          
+          {deleteError && (
+             <p className="text-rose-600 text-sm font-medium text-center">{deleteError}</p>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setIsDeleteConfirmOpen(false)}>Cancel</Button>
+            <Button variant="danger" className="flex-1" onClick={confirmDelete} disabled={isActionLoading}>
+              {isActionLoading ? 'Deleting...' : 'Yes, Delete Resident'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

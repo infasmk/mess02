@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { messStore } from '../store/messStore.ts';
 import { MealPlan } from '../types.ts';
 import { Card, Button, Input, Modal } from '../components/UI.tsx';
 import { formatCurrency } from '../utils/helpers.ts';
-import { Plus, Edit2, Utensils, Check, ChefHat } from 'lucide-react';
+import { Plus, Edit2, Utensils, Check, ChefHat, Loader2 } from 'lucide-react';
 
 const Plans: React.FC = () => {
-  const [plans, setPlans] = useState(messStore.plans);
+  const [plans, setPlans] = useState<MealPlan[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<MealPlan | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState<{
     name: string;
@@ -19,6 +21,15 @@ const Plans: React.FC = () => {
     monthly_price: '',
     meals: []
   });
+
+  useEffect(() => {
+    const load = async () => {
+        if(messStore.isLoading) await messStore.init();
+        setPlans([...messStore.plans]);
+        setLoading(false);
+    };
+    load();
+  }, []);
 
   const refreshPlans = () => setPlans([...messStore.plans]);
 
@@ -46,29 +57,44 @@ const Plans: React.FC = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.monthly_price) return;
 
+    setIsSubmitting(true);
     const price = parseFloat(formData.monthly_price);
     
-    if (editingPlan) {
-      messStore.updatePlan({
-        ...editingPlan,
-        name: formData.name,
-        monthly_price: price,
-        meals: formData.meals
-      });
-    } else {
-      messStore.addPlan({
-        name: formData.name,
-        monthly_price: price,
-        meals: formData.meals
-      });
+    try {
+        if (editingPlan) {
+        await messStore.updatePlan({
+            ...editingPlan,
+            name: formData.name,
+            monthly_price: price,
+            meals: formData.meals
+        });
+        } else {
+        await messStore.addPlan({
+            name: formData.name,
+            monthly_price: price,
+            meals: formData.meals
+        });
+        }
+        setIsModalOpen(false);
+        refreshPlans();
+    } catch (err: any) {
+        alert("Failed to save plan: " + err.message);
+    } finally {
+        setIsSubmitting(false);
     }
-    setIsModalOpen(false);
-    refreshPlans();
   };
+
+  if (loading) {
+     return (
+       <div className="flex items-center justify-center h-64">
+         <Loader2 className="animate-spin text-indigo-600" size={32} />
+       </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -163,8 +189,8 @@ const Plans: React.FC = () => {
             {formData.meals.length === 0 && <p className="text-xs text-rose-500 mt-2 font-medium">Please select at least one meal type.</p>}
           </div>
 
-          <Button type="submit" className="w-full mt-2" disabled={formData.meals.length === 0}>
-            {editingPlan ? 'Update Plan' : 'Create Plan'}
+          <Button type="submit" className="w-full mt-2" disabled={formData.meals.length === 0 || isSubmitting}>
+            {isSubmitting ? 'Saving...' : (editingPlan ? 'Update Plan' : 'Create Plan')}
           </Button>
         </form>
       </Modal>
