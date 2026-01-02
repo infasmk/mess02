@@ -49,7 +49,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
         if (role === UserRole.ADMIN) {
             // 1. Check Hardcoded Demo Credentials
-            if (identifier === 'admin@messpro.com' && password === 'admin') {
+            if (identifier === 'admin@freshbites.com' && password === 'admin') {
                 onLogin(UserRole.ADMIN, 'admin', 'Mess Administrator');
                 window.location.hash = '/';
                 return;
@@ -160,7 +160,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
            <div className={`w-20 h-20 rounded-3xl mx-auto flex items-center justify-center mb-6 shadow-xl transform rotate-3 hover:rotate-6 transition-all duration-500 ${
                role === UserRole.ADMIN ? 'bg-gradient-to-br from-slate-700 to-slate-900 shadow-slate-300' : 'bg-gradient-to-br from-indigo-600 to-indigo-700 shadow-indigo-300'
            }`}>
-            {role === UserRole.ADMIN ? <Lock className="text-white" size={32} /> : <span className="text-white text-4xl font-bold">M</span>}
+            {role === UserRole.ADMIN ? <Lock className="text-white" size={32} /> : <span className="text-white text-4xl font-bold">F</span>}
           </div>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
               {role === UserRole.ADMIN ? 'Admin Console' : 'Welcome Back'}
@@ -189,7 +189,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <Input
               label={role === UserRole.ADMIN ? "Admin Email" : "Registered Phone Number"}
               type={role === UserRole.ADMIN ? "email" : "tel"}
-              placeholder={role === UserRole.ADMIN ? "admin@messpro.com" : "10-digit mobile number"}
+              placeholder={role === UserRole.ADMIN ? "admin@freshbites.com" : "10-digit mobile number"}
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               required

@@ -47,9 +47,9 @@ export const initiatePayment = async ({
     key: RAZORPAY_KEY,
     amount: Math.round(amount * 100), // Convert INR to Paise. Math.round handles floating point errors.
     currency: "INR",
-    name: "MessPro Hostel",
+    name: "Fresh Bites",
     description: description,
-    image: "https://ui-avatars.com/api/?name=Mess+Pro&background=4f46e5&color=fff",
+    image: "https://ui-avatars.com/api/?name=Fresh+Bites&background=4f46e5&color=fff",
     
     // In a REAL production app with a Backend:
     // 1. You would call an API endpoint to create an Order (orders api)

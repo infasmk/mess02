@@ -205,8 +205,8 @@ class MessStore {
         });
     });
 
-    // Sort by Date Descending
-    return activities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10);
+    // Sort by Date Descending and return top 50 (for View All)
+    return activities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 50);
   }
 
   checkOverlap(studentId: string, startDate: string, endDate: string): boolean {

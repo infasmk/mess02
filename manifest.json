@@ -1,0 +1,22 @@
+{
+  "name": "Fresh Bites Hostel Management",
+  "short_name": "Fresh Bites",
+  "description": "Manage your hostel mess, payments, and residents with ease.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1535/1535019.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1535/1535019.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

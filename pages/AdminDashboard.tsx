@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { messStore } from '../store/messStore.ts';
 import { KPIStats, Student, ActivityLog, Payment } from '../types.ts';
-import { Card, Select } from '../components/UI.tsx';
+import { Card, Select, Modal } from '../components/UI.tsx';
 import { formatCurrency, formatDate, getDerivedStatus } from '../utils/helpers.ts';
 import { TrendingUp, Users, AlertCircle, Wallet, MessageCircle, Clock, UserPlus, CreditCard, ArrowRight, Check, X, RefreshCw, Calendar } from 'lucide-react';
 
@@ -13,6 +13,7 @@ const AdminDashboard: React.FC = () => {
   const [pendingPayments, setPendingPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0); // Used to trigger re-renders
+  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
 
   // Helper to ensure consistent Local YYYY-MM format
   const getLocalMonthKey = (date: Date) => {
@@ -123,6 +124,26 @@ const AdminDashboard: React.FC = () => {
     window.open(url, '_blank');
     await messStore.updateLastReminder(student.id);
   };
+
+  const renderActivityItem = (log: ActivityLog) => (
+      <li key={log.id} className="p-4 hover:bg-slate-50 transition-colors flex items-start gap-3">
+          <div className={`p-2 rounded-full shrink-0 ${
+              log.type === 'payment' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'
+          }`}>
+              {log.type === 'payment' ? <CreditCard size={14} /> : <UserPlus size={14} />}
+          </div>
+          <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-800 truncate">{log.title}</p>
+              <p className="text-xs text-slate-500 truncate">{log.description}</p>
+              <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] text-slate-400">{formatDate(log.date)}</span>
+                  {log.amount && (
+                      <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-1.5 rounded">{formatCurrency(log.amount)}</span>
+                  )}
+              </div>
+          </div>
+      </li>
+  );
 
   if (loading && !stats) {
     return (
@@ -361,36 +382,39 @@ const AdminDashboard: React.FC = () => {
                   <div className="p-8 text-center text-slate-400 text-sm">No activity recorded yet.</div>
                ) : (
                    <ul className="divide-y divide-slate-100">
-                       {activityLog.map((log) => (
-                           <li key={log.id} className="p-4 hover:bg-slate-50 transition-colors flex items-start gap-3">
-                               <div className={`p-2 rounded-full shrink-0 ${
-                                   log.type === 'payment' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'
-                               }`}>
-                                   {log.type === 'payment' ? <CreditCard size={14} /> : <UserPlus size={14} />}
-                               </div>
-                               <div className="flex-1 min-w-0">
-                                   <p className="text-sm font-semibold text-slate-800 truncate">{log.title}</p>
-                                   <p className="text-xs text-slate-500 truncate">{log.description}</p>
-                                   <div className="flex items-center gap-2 mt-1">
-                                       <span className="text-[10px] text-slate-400">{formatDate(log.date)}</span>
-                                       {log.amount && (
-                                           <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-1.5 rounded">{formatCurrency(log.amount)}</span>
-                                       )}
-                                   </div>
-                               </div>
-                           </li>
-                       ))}
+                       {/* Show only top 5 */}
+                       {activityLog.slice(0, 5).map(renderActivityItem)}
                    </ul>
                )}
                <div className="p-3 border-t border-slate-100 text-center">
-                   <a href="#/history" className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center justify-center gap-1">
+                   <button 
+                    onClick={() => setIsActivityModalOpen(true)}
+                    className="w-full text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 p-2 rounded-lg flex items-center justify-center gap-1 transition-colors"
+                   >
                        View All <ArrowRight size={12} />
-                   </a>
+                   </button>
                </div>
             </div>
           </Card>
         </div>
       </div>
+
+      {/* Full Activity Modal */}
+      <Modal 
+        isOpen={isActivityModalOpen} 
+        onClose={() => setIsActivityModalOpen(false)} 
+        title="Full Activity Log"
+      >
+        <div className="space-y-4">
+             {activityLog.length === 0 ? (
+                  <div className="text-center text-slate-400 py-4">No activity found.</div>
+             ) : (
+                 <ul className="divide-y divide-slate-100">
+                     {activityLog.map(renderActivityItem)}
+                 </ul>
+             )}
+        </div>
+      </Modal>
     </div>
   );
 };
