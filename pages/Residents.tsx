@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { messStore } from '../store/messStore.ts';
 import { Student } from '../types.ts';
@@ -102,6 +103,7 @@ const Residents: React.FC = () => {
           amount: parseFloat(paymentForm.amount),
           date: new Date().toISOString(),
           mode: paymentForm.mode as any,
+          status: 'verified' // Admin Recorded payments are auto-verified
         });
         setIsPaymentOpen(false);
         setPaymentForm({ amount: '', mode: 'cash' });

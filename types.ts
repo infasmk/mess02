@@ -1,3 +1,4 @@
+
 export enum UserRole {
   ADMIN = 'ADMIN',
   STUDENT = 'STUDENT'
@@ -38,6 +39,7 @@ export interface Payment {
   mode: 'online' | 'cash' | 'upi';
   transaction_id?: string;
   notes?: string;
+  status: 'verified' | 'pending' | 'rejected';
 }
 
 export interface KPIStats {

@@ -3,15 +3,15 @@ import { UserRole } from '../types.ts';
 import { Button, Input } from '../components/UI.tsx';
 import { messStore } from '../store/messStore.ts';
 import { supabase } from '../services/supabaseClient.ts';
-import { Loader2, Wifi, WifiOff, Database, Lock, GraduationCap } from 'lucide-react';
+import { Loader2, Wifi, WifiOff, Database, Lock, UserCircle } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (role: UserRole, id: string, name: string) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  // CHANGED: Default to STUDENT instead of ADMIN
-  const [role, setRole] = useState<UserRole>(UserRole.STUDENT);
+  // CHANGED: Default to ADMIN
+  const [role, setRole] = useState<UserRole>(UserRole.ADMIN);
   const [identifier, setIdentifier] = useState(''); // Email or Phone
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -206,20 +206,20 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
           {/* Discreet Role Switcher */}
           <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-             {role === UserRole.STUDENT ? (
+             {role === UserRole.ADMIN ? (
                  <button 
                     onClick={toggleRole}
                     className="text-xs font-medium text-slate-300 hover:text-indigo-600 transition-colors"
                  >
-                    Staff Administration
+                    User Access
                  </button>
              ) : (
                  <button 
                     onClick={toggleRole}
                     className="flex items-center justify-center gap-2 mx-auto text-sm font-semibold text-indigo-600 hover:text-indigo-700 transition-colors"
                  >
-                    <GraduationCap size={16} />
-                    Back to Student Login
+                    <Lock size={16} />
+                    Back to Admin Login
                  </button>
              )}
           </div>
