@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { messStore } from '../store/messStore.ts';
 import { Student } from '../types.ts';
-import { Card, Button, Input, Modal, Select, Badge, DateRangePicker } from '../components/UI.tsx';
-import { formatCurrency, calculateProratedCharge } from '../utils/helpers.ts';
-import { Search, UserPlus, CreditCard, Calendar, Phone, AlertCircle, Clock, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Card, Button, Input, Modal, Select, DateRangePicker } from '../components/UI.tsx';
+import { formatCurrency, calculateProratedCharge, getDerivedStatus, formatDate, getDaysRemaining } from '../utils/helpers.ts';
+import { Search, UserPlus, CreditCard, Calendar, Phone, AlertCircle, Clock, Trash2, AlertTriangle, Loader2, Info, X } from 'lucide-react';
 
 const Residents: React.FC = () => {
   const [students, setStudents] = useState<any[]>([]);
@@ -15,6 +15,7 @@ const Residents: React.FC = () => {
   const [isAssignPlanOpen, setIsAssignPlanOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
   // Form States
@@ -146,7 +147,6 @@ const Residents: React.FC = () => {
     // Calculate last day of the target month
     const end = new Date(now.getFullYear(), now.getMonth() + offsetMonth + 1, 0);
 
-    // Format as YYYY-MM-DD local
     const formatDate = (d: Date) => {
         const year = d.getFullYear();
         const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -174,6 +174,11 @@ const Residents: React.FC = () => {
     setIsPaymentOpen(true);
   };
 
+  const openDetails = (student: Student) => {
+      setSelectedStudent(student);
+      setIsDetailsOpen(true);
+  };
+
   const estimatedCharge = planForm.planId && planForm.startDate && planForm.endDate
     ? calculateProratedCharge(
         (messStore.plans.find(p => p.id === planForm.planId) || {monthly_price: 0}).monthly_price,
@@ -181,6 +186,25 @@ const Residents: React.FC = () => {
         planForm.endDate
       )
     : 0;
+
+  // Render Logic Helpers
+  const renderStatusBadge = (student: Student & { balance: number }) => {
+      const activeAssignment = messStore.getActiveAssignment(student.id);
+      const status = getDerivedStatus(activeAssignment, student.balance);
+
+      const colorStyles = {
+          emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+          amber: 'bg-amber-50 text-amber-700 border-amber-100',
+          rose: 'bg-rose-50 text-rose-700 border-rose-100',
+          slate: 'bg-slate-50 text-slate-600 border-slate-200'
+      };
+
+      return (
+          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${colorStyles[status.color]}`}>
+              {status.label}
+          </span>
+      );
+  };
 
   if (loading) {
     return (
@@ -240,20 +264,29 @@ const Residents: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1 items-end">
-                  <Badge status={student.status} />
-                  <button 
-                    onClick={() => handleDeleteClick(student)}
-                    className="text-slate-300 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg transition-colors mt-1"
-                    title="Delete Resident"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  {renderStatusBadge(student)}
+                  <div className="flex gap-1 mt-1">
+                      <button 
+                        onClick={() => openDetails(student)}
+                        className="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-lg transition-colors"
+                        title="View Details"
+                      >
+                        <Info size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteClick(student)}
+                        className="text-slate-300 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg transition-colors"
+                        title="Delete Resident"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                  </div>
                 </div>
               </div>
               
               <div className="mt-auto">
                 <div className="px-5 py-3 bg-slate-50/50 border-y border-slate-100 flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Current Due</span>
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Balance</span>
                   <span className={`text-lg font-bold ${student.balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                     {formatCurrency(student.balance)}
                   </span>
@@ -406,6 +439,69 @@ const Residents: React.FC = () => {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Details Modal */}
+      <Modal isOpen={isDetailsOpen} onClose={() => setIsDetailsOpen(false)} title="Resident Details">
+         {selectedStudent && (() => {
+             const activePlan = messStore.getActiveAssignment(selectedStudent.id);
+             const planDetails = activePlan ? messStore.plans.find(p => p.id === activePlan.plan_id) : null;
+             const daysLeft = activePlan ? getDaysRemaining(activePlan.end_date) : 0;
+             const isExpired = daysLeft < 0;
+
+             return (
+                 <div className="space-y-6">
+                     <div className="flex items-center space-x-4 pb-4 border-b border-slate-100">
+                        <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-2xl border border-indigo-100">
+                            {selectedStudent.name.charAt(0)}
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-slate-900">{selectedStudent.name}</h3>
+                            <p className="text-slate-500 font-medium">Room {selectedStudent.room}</p>
+                        </div>
+                     </div>
+
+                     <div className="space-y-4">
+                        <div>
+                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Active Subscription</h4>
+                            {activePlan && planDetails ? (
+                                <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <span className="font-bold text-slate-800 text-lg">{planDetails.name}</span>
+                                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                            isExpired ? 'bg-slate-200 text-slate-600' : 
+                                            daysLeft <= 3 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                                        }`}>
+                                            {isExpired ? 'EXPIRED' : daysLeft <= 3 ? 'EXPIRING SOON' : 'ACTIVE'}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-2 text-sm text-slate-600">
+                                        <div className="flex justify-between">
+                                            <span>Start Date</span>
+                                            <span className="font-medium text-slate-900">{formatDate(activePlan.start_date)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span>End Date</span>
+                                            <span className="font-medium text-slate-900">{formatDate(activePlan.end_date)}</span>
+                                        </div>
+                                        <div className="pt-2 border-t border-slate-200 flex justify-between items-center mt-2">
+                                            <span className="font-medium">Days Remaining</span>
+                                            <span className={`font-bold ${daysLeft <= 3 ? 'text-amber-600' : 'text-indigo-600'}`}>
+                                                {isExpired ? '0' : daysLeft} Days
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-center p-6 bg-slate-50 rounded-xl border border-slate-200 border-dashed text-slate-400">
+                                    No active meal plan.
+                                </div>
+                            )}
+                        </div>
+                     </div>
+                 </div>
+             );
+         })()}
       </Modal>
     </div>
   );

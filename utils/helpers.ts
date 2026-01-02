@@ -1,3 +1,5 @@
+import { Assignment } from '../types';
+
 export const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -32,11 +34,6 @@ export const calculateProratedCharge = (
   const diffTime = Math.abs(end.getTime() - start.getTime());
   const activeDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-  // Simple Proration: (Monthly Price / 30) * Active Days
-  // Using 30 as a standard denominator for mess calculations often simplifies logic, 
-  // but strictly correct is days in specific month. Let's use 30 for stability or specific month days.
-  // Requirement: (Monthly Price / Days in Month) × Active Days
-  
   const daysInStartMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
   const dailyRate = monthlyPrice / daysInStartMonth;
   
@@ -45,4 +42,40 @@ export const calculateProratedCharge = (
 
 export const generateId = () => {
   return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+};
+
+export const getDaysRemaining = (endDateStr: string): number => {
+  const end = new Date(endDateStr);
+  const today = new Date();
+  end.setHours(23, 59, 59, 999); // End of the end date
+  
+  const diffTime = end.getTime() - today.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
+
+export const getDerivedStatus = (activeAssignment: Assignment | undefined, balance: number): { 
+  label: string; 
+  color: 'emerald' | 'amber' | 'rose' | 'slate';
+  isOverdue: boolean 
+} => {
+  // If no active assignment
+  if (!activeAssignment) {
+    if (balance > 0) return { label: 'Overdue', color: 'rose', isOverdue: true };
+    return { label: 'Inactive', color: 'slate', isOverdue: false };
+  }
+
+  const daysLeft = getDaysRemaining(activeAssignment.end_date);
+
+  // If assignment is technically active in DB but date has passed (should be processed as expired)
+  if (daysLeft < 0) {
+    if (balance > 0) return { label: 'Overdue', color: 'rose', isOverdue: true };
+    return { label: 'Expired', color: 'slate', isOverdue: false };
+  }
+
+  // Active Assignment Logic
+  if (daysLeft <= 3) {
+    return { label: 'Expiring Soon', color: 'amber', isOverdue: false };
+  }
+
+  return { label: 'Ongoing', color: 'emerald', isOverdue: false };
 };

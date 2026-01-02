@@ -1,5 +1,5 @@
-import { Student, MealPlan, Assignment, Payment, KPIStats } from '../types.ts';
-import { generateId, calculateProratedCharge } from '../utils/helpers.ts';
+import { Student, MealPlan, Assignment, Payment, KPIStats, ActivityLog } from '../types.ts';
+import { generateId, calculateProratedCharge, getDerivedStatus } from '../utils/helpers.ts';
 import { supabase } from '../services/supabaseClient.ts';
 
 class MessStore {
@@ -49,7 +49,8 @@ class MessStore {
     if (assignmentsRes.error) throw assignmentsRes.error;
     if (paymentsRes.error) throw paymentsRes.error;
 
-    this.students = studentsRes.data || [];
+    // Convert phone to string to ensure type safety across app
+    this.students = (studentsRes.data || []).map(s => ({...s, phone: String(s.phone)}));
     this.plans = plansRes.data || [];
     this.assignments = assignmentsRes.data || [];
     this.payments = paymentsRes.data || [];
@@ -109,9 +110,18 @@ class MessStore {
     const totalAssignedCharges = this.assignments.reduce((sum, a) => sum + Number(a.charge), 0);
     const totalCollected = this.payments.reduce((sum, p) => sum + Number(p.amount), 0);
     
+    // Filter for actual overdue (Expired plan with balance)
+    const overdueList = this.getStudentsWithDues().filter(s => {
+       const activeAssignment = this.assignments.find(a => a.student_id === s.id && a.status === 'active');
+       const status = getDerivedStatus(activeAssignment, s.balance);
+       return status.isOverdue;
+    });
+
+    const totalOverdueAmount = overdueList.reduce((sum, s) => sum + s.balance, 0);
+    
     return {
       totalCollections: totalCollected,
-      totalOverdue: Math.max(0, totalAssignedCharges - totalCollected),
+      totalOverdue: totalOverdueAmount,
       outstandingBalance: totalAssignedCharges - totalCollected,
       activeResidents: this.students.filter(s => s.status === 'active').length
     };
@@ -144,6 +154,41 @@ class MessStore {
     }).sort((a, b) => b.balance - a.balance);
   }
 
+  getActiveAssignment(studentId: string) {
+    return this.assignments.find(a => a.student_id === studentId && a.status === 'active');
+  }
+
+  getRecentActivity(): ActivityLog[] {
+    const activities: ActivityLog[] = [];
+
+    // Add Payments
+    this.payments.forEach(p => {
+        const student = this.students.find(s => s.id === p.student_id);
+        activities.push({
+            id: p.id,
+            type: 'payment',
+            title: `Payment Received`,
+            description: `${student?.name || 'Unknown'} paid via ${p.mode}`,
+            amount: p.amount,
+            date: p.date
+        });
+    });
+
+    // Add Registrations
+    this.students.forEach(s => {
+        activities.push({
+            id: `reg_${s.id}`,
+            type: 'registration',
+            title: 'New Resident',
+            description: `${s.name} added to Room ${s.room}`,
+            date: s.created_at
+        });
+    });
+
+    // Sort by Date Descending
+    return activities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10);
+  }
+
   checkOverlap(studentId: string, startDate: string, endDate: string): boolean {
     const newStart = new Date(startDate).getTime();
     const newEnd = new Date(endDate).getTime();
@@ -162,10 +207,12 @@ class MessStore {
   // --- ASYNC ACTIONS ---
 
   async addStudent(student: Omit<Student, 'id' | 'created_at' | 'status'>) {
+    // Ensure phone is stored as string
+    const phoneStr = String(student.phone);
     if (this.isSupabaseConfigured) {
       const { data, error } = await supabase.from('students').insert([{
         name: student.name,
-        phone: student.phone,
+        phone: phoneStr,
         room: student.room,
         status: 'active',
         created_at: new Date().toISOString()
@@ -176,6 +223,7 @@ class MessStore {
     } else {
       const newStudent: Student = {
         ...student,
+        phone: phoneStr,
         id: `stu_${generateId()}`,
         status: 'active',
         created_at: new Date().toISOString()

@@ -53,6 +53,15 @@ export interface CurrentUser {
   name: string;
 }
 
+export interface ActivityLog {
+  id: string;
+  type: 'payment' | 'registration' | 'assignment';
+  title: string;
+  description: string;
+  date: string;
+  amount?: number;
+}
+
 // --- Razorpay Types ---
 
 export interface RazorpayResponse {
