@@ -362,7 +362,13 @@ class MessStore {
         status: paymentStatus
       }]).select().single();
 
-      if (error) throw error;
+      if (error) {
+        // Explicitly check for column missing error which happens when schema is outdated
+        if (error.message && (error.message.includes('status') || error.message.includes('column'))) {
+            throw new Error("Database Error: The 'status' column is missing in 'payments' table. Please ask Admin to run the update SQL.");
+        }
+        throw error;
+      }
       this.payments.unshift(data);
     } else {
       const newPayment: Payment = { ...payment, status: paymentStatus, id: `pay_${generateId()}` };
