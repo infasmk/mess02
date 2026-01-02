@@ -34,8 +34,8 @@ export const calculateProratedCharge = (
   const diffTime = Math.abs(end.getTime() - start.getTime());
   const activeDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-  const daysInStartMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
-  const dailyRate = monthlyPrice / daysInStartMonth;
+  // Standardized 30-day month for custom proration
+  const dailyRate = monthlyPrice / 30;
   
   return Math.round(dailyRate * activeDays);
 };

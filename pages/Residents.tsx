@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { messStore } from '../store/messStore.ts';
 import { Student } from '../types.ts';
 import { Card, Button, Input, Modal, Select, DateRangePicker } from '../components/UI.tsx';
 import { formatCurrency, calculateProratedCharge, getDerivedStatus, formatDate, getDaysRemaining } from '../utils/helpers.ts';
-import { Search, UserPlus, CreditCard, Calendar, Phone, AlertCircle, Clock, Trash2, AlertTriangle, Loader2, Info, X } from 'lucide-react';
+import { Search, UserPlus, CreditCard, Calendar, Phone, AlertCircle, Clock, Trash2, AlertTriangle, Loader2, Info, X, CalendarDays, SlidersHorizontal } from 'lucide-react';
 
 const Residents: React.FC = () => {
   const [students, setStudents] = useState<any[]>([]);
@@ -21,7 +20,12 @@ const Residents: React.FC = () => {
 
   // Form States
   const [newStudent, setNewStudent] = useState({ name: '', phone: '', room: '' });
+  
+  // Plan Assignment States
+  const [durationMode, setDurationMode] = useState<'month' | 'custom'>('month');
+  const [selectedMonth, setSelectedMonth] = useState(''); // YYYY-MM
   const [planForm, setPlanForm] = useState({ planId: '', startDate: '', endDate: '' });
+  
   const [paymentForm, setPaymentForm] = useState({ amount: '', mode: 'cash' });
   const [assignmentError, setAssignmentError] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -75,7 +79,7 @@ const Residents: React.FC = () => {
     }
 
     if (!planForm.startDate || !planForm.endDate) {
-        setAssignmentError("Please select a valid date range.");
+        setAssignmentError("Please select a valid duration.");
         return;
     }
 
@@ -142,29 +146,46 @@ const Residents: React.FC = () => {
     }
   };
 
-  const setPlanDates = (offsetMonth: number) => {
-    const now = new Date();
-    // Calculate 1st day of the target month
-    const start = new Date(now.getFullYear(), now.getMonth() + offsetMonth, 1);
-    // Calculate last day of the target month
-    const end = new Date(now.getFullYear(), now.getMonth() + offsetMonth + 1, 0);
+  // Helper: Get YYYY-MM for current month
+  const getCurrentMonthStr = () => {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  };
 
-    const formatDate = (d: Date) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
+  // Handle Month Selection for "Full Month" Mode
+  const handleMonthChange = (monthStr: string) => {
+      setSelectedMonth(monthStr);
+      if (!monthStr) return;
 
-    setPlanForm(prev => ({ ...prev, startDate: formatDate(start), endDate: formatDate(end) }));
-    setAssignmentError('');
+      const [year, month] = monthStr.split('-').map(Number);
+      const start = new Date(year, month - 1, 1);
+      const end = new Date(year, month, 0); // Last day of month
+
+      // Format for stored date string
+      const formatDateStr = (d: Date) => {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${y}-${m}-${day}`;
+      };
+
+      setPlanForm(prev => ({ 
+          ...prev, 
+          startDate: formatDateStr(start), 
+          endDate: formatDateStr(end) 
+      }));
+      setAssignmentError('');
   };
 
   const openAssignPlan = (student: Student) => {
     setSelectedStudent(student);
     setAssignmentError('');
-    // Default to "This Month"
-    setPlanDates(0); 
+    
+    // Default to Full Month mode for current month
+    setDurationMode('month');
+    const currentM = getCurrentMonthStr();
+    handleMonthChange(currentM);
+    
     setPlanForm(prev => ({ ...prev, planId: messStore.plans[0]?.id || '' }));
     setIsAssignPlanOpen(true);
   };
@@ -181,13 +202,25 @@ const Residents: React.FC = () => {
       setIsDetailsOpen(true);
   };
 
-  const estimatedCharge = planForm.planId && planForm.startDate && planForm.endDate
-    ? calculateProratedCharge(
-        (messStore.plans.find(p => p.id === planForm.planId) || {monthly_price: 0}).monthly_price,
-        planForm.startDate,
-        planForm.endDate
-      )
-    : 0;
+  // --- CHARGE CALCULATION LOGIC ---
+  const selectedPlan = messStore.plans.find(p => p.id === planForm.planId);
+  const monthlyPrice = selectedPlan ? selectedPlan.monthly_price : 0;
+  
+  let finalCharge = 0;
+  let durationLabel = "";
+
+  if (planForm.startDate && planForm.endDate && selectedPlan) {
+      if (durationMode === 'month') {
+          // Full Month Mode: Fixed Price regardless of 28/30/31 days
+          finalCharge = monthlyPrice;
+          durationLabel = "Full Month (Fixed)";
+      } else {
+          // Custom Mode: (Price / 30) * Days
+          finalCharge = calculateProratedCharge(monthlyPrice, planForm.startDate, planForm.endDate);
+          const days = Math.ceil((new Date(planForm.endDate).getTime() - new Date(planForm.startDate).getTime()) / (1000 * 3600 * 24)) + 1;
+          durationLabel = `${days} Days (Custom)`;
+      }
+  }
 
   // Render Logic Helpers
   const renderStatusBadge = (student: Student & { balance: number }) => {
@@ -330,6 +363,7 @@ const Residents: React.FC = () => {
                 <p className="text-sm text-rose-700 font-medium">{assignmentError}</p>
              </div>
           )}
+          
           <Select label="Select Meal Plan" value={planForm.planId} onChange={e => setPlanForm({...planForm, planId: e.target.value})} required>
             <option value="" disabled>Choose a plan...</option>
             {messStore.plans.map(p => (
@@ -338,42 +372,77 @@ const Residents: React.FC = () => {
           </Select>
 
           <div className="space-y-3">
-            <div className="flex justify-between items-center px-1">
-                <label className="block text-sm font-semibold text-slate-700">Plan Duration</label>
-                <div className="flex gap-2">
-                    <button type="button" onClick={() => setPlanDates(0)} className="text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100 transition-colors">This Month</button>
-                    <button type="button" onClick={() => setPlanDates(1)} className="text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100 transition-colors">Next Month</button>
-                </div>
-            </div>
-            
-            <DateRangePicker 
-              startDate={planForm.startDate} 
-              endDate={planForm.endDate} 
-              onChange={(start, end) => {
-                setPlanForm(prev => ({...prev, startDate: start, endDate: end}));
-                if (start && end) setAssignmentError('');
-              }} 
-            />
+             <label className="block text-sm font-semibold text-slate-700">Duration Settings</label>
+             
+             {/* Duration Mode Toggles */}
+             <div className="grid grid-cols-2 bg-slate-100 p-1 rounded-xl">
+                 <button
+                    type="button"
+                    onClick={() => setDurationMode('month')}
+                    className={`py-2 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
+                        durationMode === 'month' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                 >
+                     <CalendarDays size={14} /> Full Month
+                 </button>
+                 <button
+                    type="button"
+                    onClick={() => setDurationMode('custom')}
+                    className={`py-2 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
+                        durationMode === 'custom' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                 >
+                     <SlidersHorizontal size={14} /> Custom Days
+                 </button>
+             </div>
 
-            <div className="flex justify-between text-xs text-slate-500 px-1">
-               <span>Start: <span className="font-semibold text-slate-700">{planForm.startDate || '-'}</span></span>
-               <span>End: <span className="font-semibold text-slate-700">{planForm.endDate || '-'}</span></span>
-            </div>
+             {durationMode === 'month' ? (
+                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Select Month</label>
+                    <input 
+                        type="month" 
+                        value={selectedMonth}
+                        onChange={(e) => handleMonthChange(e.target.value)}
+                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                    />
+                    <p className="text-xs text-slate-400 mt-2">
+                        Includes all days in the selected month. <br/>
+                        Price is fixed at monthly rate.
+                    </p>
+                 </div>
+             ) : (
+                <>
+                    <DateRangePicker 
+                    startDate={planForm.startDate} 
+                    endDate={planForm.endDate} 
+                    onChange={(start, end) => {
+                        setPlanForm(prev => ({...prev, startDate: start, endDate: end}));
+                        if (start && end) setAssignmentError('');
+                    }} 
+                    />
+                    <div className="flex justify-between text-xs text-slate-500 px-1">
+                        <span>Start: <span className="font-semibold text-slate-700">{planForm.startDate || '-'}</span></span>
+                        <span>End: <span className="font-semibold text-slate-700">{planForm.endDate || '-'}</span></span>
+                    </div>
+                </>
+             )}
           </div>
 
           <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex items-center justify-between">
              <div>
-                <span className="text-sm font-medium text-indigo-700 block">Calculated Charge</span>
+                <span className="text-sm font-medium text-indigo-700 block">Total Charge</span>
                 {planForm.startDate && planForm.endDate && (
                     <span className="text-[10px] text-indigo-400 font-medium flex items-center mt-1">
                         <Clock size={10} className="mr-1"/>
-                        {Math.ceil((new Date(planForm.endDate).getTime() - new Date(planForm.startDate).getTime()) / (1000 * 3600 * 24)) + 1} Days
+                        {durationLabel}
                     </span>
                 )}
              </div>
              <div className="text-right">
-                <span className="block text-2xl font-bold text-indigo-700 leading-none">{formatCurrency(estimatedCharge)}</span>
-                <span className="text-[10px] text-indigo-400 font-medium">PRO-RATED</span>
+                <span className="block text-2xl font-bold text-indigo-700 leading-none">{formatCurrency(finalCharge)}</span>
+                <span className="text-[10px] text-indigo-400 font-medium uppercase">
+                    {durationMode === 'month' ? 'FIXED PRICE' : 'CALCULATED (/30 DAYS)'}
+                </span>
              </div>
           </div>
 
