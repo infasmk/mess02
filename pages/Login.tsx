@@ -3,15 +3,15 @@ import { UserRole } from '../types.ts';
 import { Button, Input } from '../components/UI.tsx';
 import { messStore } from '../store/messStore.ts';
 import { supabase } from '../services/supabaseClient.ts';
-import { Loader2, Wifi, WifiOff, Database, Lock, UserCircle } from 'lucide-react';
+import { Loader2, Wifi, WifiOff, Database, Lock, UserCircle, ShieldCheck, ChevronLeft } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (role: UserRole, id: string, name: string) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  // CHANGED: Default to ADMIN
-  const [role, setRole] = useState<UserRole>(UserRole.ADMIN);
+  const [step, setStep] = useState<'selection' | 'login'>('selection');
+  const [role, setRole] = useState<UserRole>(UserRole.STUDENT);
   const [identifier, setIdentifier] = useState(''); // Email or Phone
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,7 +20,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   // Pre-load data on mount to minimize waiting time and check connection
   useEffect(() => {
-    const checkDb = async () => {
+    const init = async () => {
       try {
         await messStore.init();
       } catch (e) {
@@ -28,9 +28,34 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         console.warn("Store init check failed", e);
       }
       setDbStatus(messStore.isSupabaseConfigured ? 'connected' : 'offline');
+
+      // Check for saved role preference
+      const savedRole = localStorage.getItem('freshBites_prefRole');
+      if (savedRole && (savedRole === UserRole.ADMIN || savedRole === UserRole.STUDENT)) {
+          setRole(savedRole as UserRole);
+          setStep('login');
+      }
     };
-    checkDb();
+    init();
   }, []);
+
+  const selectRole = (selectedRole: UserRole) => {
+      setRole(selectedRole);
+      setStep('login');
+      localStorage.setItem('freshBites_prefRole', selectedRole);
+      // Reset form state
+      setError('');
+      setIdentifier('');
+      setPassword('');
+  };
+
+  const resetSelection = () => {
+      setStep('selection');
+      localStorage.removeItem('freshBites_prefRole');
+      setError('');
+      setIdentifier('');
+      setPassword('');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,13 +149,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
   };
 
-  const toggleRole = () => {
-      setRole(prev => prev === UserRole.ADMIN ? UserRole.STUDENT : UserRole.ADMIN);
-      setError('');
-      setIdentifier('');
-      setPassword('');
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6 relative overflow-hidden">
       {/* Background Decor */}
@@ -156,96 +174,124 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
        </div>
 
       <div className="w-full max-w-md relative z-10">
-        <div className="text-center mb-8">
-           <div className={`w-20 h-20 rounded-3xl mx-auto flex items-center justify-center mb-6 shadow-xl transform rotate-3 hover:rotate-6 transition-all duration-500 ${
-               role === UserRole.ADMIN ? 'bg-gradient-to-br from-slate-700 to-slate-900 shadow-slate-300' : 'bg-gradient-to-br from-indigo-600 to-indigo-700 shadow-indigo-300'
-           }`}>
-            {role === UserRole.ADMIN ? <Lock className="text-white" size={32} /> : <span className="text-white text-4xl font-bold">F</span>}
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-              {role === UserRole.ADMIN ? 'Admin Console' : 'Welcome Back'}
-          </h1>
-          <p className="text-slate-500 font-medium mt-2">
-              {role === UserRole.ADMIN ? 'Secure access for management.' : 'Sign in to manage your meals.'}
-          </p>
-        </div>
+        
+        {step === 'selection' ? (
+            /* --- ROLE SELECTION SCREEN --- */
+            <div className="bg-white/80 backdrop-blur-xl p-8 rounded-3xl shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] border border-white/50 animate-fade-in">
+                <div className="text-center mb-8">
+                    <div className="w-16 h-16 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-2xl mx-auto flex items-center justify-center shadow-lg shadow-indigo-200 mb-4">
+                            <span className="text-white text-3xl font-bold">F</span>
+                    </div>
+                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Welcome to Fresh Bites</h1>
+                    <p className="text-slate-500 mt-2 font-medium">Please select your portal to continue.</p>
+                </div>
 
-        <div className="bg-white p-8 rounded-3xl shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] border border-slate-100">
-          
-          {/* Offline Warning Banner inside card */}
-          {dbStatus === 'offline' && (
-             <div className="mb-6 bg-amber-50 border border-amber-100 p-3 rounded-xl flex items-start gap-3 animate-fade-in">
-                 <div className="bg-amber-100 p-1.5 rounded-lg text-amber-600 shrink-0">
-                    <Database size={16} />
-                 </div>
-                 <div className="text-xs text-amber-800 leading-relaxed">
-                     <span className="font-bold block text-amber-900 mb-0.5">Database Unreachable</span>
-                     Running in local demo mode. Changes are saved to browser storage only.
-                 </div>
-             </div>
-          )}
+                <div className="grid grid-cols-2 gap-4">
+                    <button 
+                        onClick={() => selectRole(UserRole.ADMIN)}
+                        className="group p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-800 hover:shadow-lg transition-all text-center flex flex-col items-center gap-4 relative overflow-hidden"
+                    >
+                        <div className="absolute inset-0 bg-slate-800 opacity-0 group-hover:opacity-5 transition-opacity"></div>
+                        <div className="w-14 h-14 rounded-full bg-slate-100 group-hover:bg-slate-800 group-hover:text-white flex items-center justify-center text-slate-600 transition-colors">
+                            <ShieldCheck size={28} />
+                        </div>
+                        <span className="font-bold text-slate-700 group-hover:text-slate-900">Admin</span>
+                    </button>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <Input
-              label={role === UserRole.ADMIN ? "Admin Email" : "Registered Phone Number"}
-              type={role === UserRole.ADMIN ? "email" : "tel"}
-              placeholder={role === UserRole.ADMIN ? "admin@freshbites.com" : "10-digit mobile number"}
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              required
-              autoFocus
-            />
-            
-            {role === UserRole.ADMIN && (
-              <Input
-                label="Password"
-                type="password"
-                placeholder="••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            )}
+                    <button 
+                        onClick={() => selectRole(UserRole.STUDENT)}
+                        className="group p-5 rounded-2xl border border-slate-200 bg-white hover:border-indigo-600 hover:shadow-lg hover:shadow-indigo-500/10 transition-all text-center flex flex-col items-center gap-4 relative overflow-hidden"
+                    >
+                        <div className="absolute inset-0 bg-indigo-600 opacity-0 group-hover:opacity-5 transition-opacity"></div>
+                        <div className="w-14 h-14 rounded-full bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white flex items-center justify-center text-indigo-600 transition-colors">
+                            <UserCircle size={28} />
+                        </div>
+                        <span className="font-bold text-slate-700 group-hover:text-indigo-900">Resident</span>
+                    </button>
+                </div>
+            </div>
+        ) : (
+            /* --- LOGIN FORM SCREEN --- */
+            <div className="bg-white p-8 rounded-3xl shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] border border-slate-100 animate-fade-in">
+                
+                <button 
+                    onClick={resetSelection} 
+                    className="flex items-center text-slate-400 hover:text-indigo-600 text-xs font-bold uppercase tracking-wider mb-6 transition-colors group"
+                >
+                    <ChevronLeft size={14} className="mr-1 group-hover:-translate-x-1 transition-transform" /> 
+                    Change Role
+                </button>
 
-            {error && (
-              <div className="text-rose-600 text-sm bg-rose-50 p-3 rounded-xl border border-rose-100 flex items-center font-medium">
-                <span className="w-1.5 h-1.5 bg-rose-500 rounded-full mr-2"></span>
-                {error}
-              </div>
-            )}
+                {/* Offline Warning Banner inside card */}
+                {dbStatus === 'offline' && (
+                    <div className="mb-6 bg-amber-50 border border-amber-100 p-3 rounded-xl flex items-start gap-3">
+                        <div className="bg-amber-100 p-1.5 rounded-lg text-amber-600 shrink-0">
+                            <Database size={16} />
+                        </div>
+                        <div className="text-xs text-amber-800 leading-relaxed">
+                            <span className="font-bold block text-amber-900 mb-0.5">Database Unreachable</span>
+                            Running in local demo mode. Changes are saved to browser storage only.
+                        </div>
+                    </div>
+                )}
 
-            <Button type="submit" className={`w-full text-base py-3 ${role === UserRole.ADMIN ? 'bg-slate-800 hover:bg-slate-900 shadow-slate-200' : ''}`} disabled={isLoading}>
-              {isLoading ? (
-                  <div className="flex items-center justify-center space-x-2">
-                      <Loader2 size={20} className="animate-spin" />
-                      <span>Verifying...</span>
-                  </div>
-              ) : (
-                  role === UserRole.ADMIN ? 'Authenticate' : 'Access Portal'
-              )}
-            </Button>
-          </form>
+                <div className="text-center mb-8">
+                    <div className={`w-16 h-16 rounded-3xl mx-auto flex items-center justify-center mb-4 shadow-xl transform rotate-3 ${
+                        role === UserRole.ADMIN ? 'bg-gradient-to-br from-slate-700 to-slate-900 shadow-slate-300' : 'bg-gradient-to-br from-indigo-600 to-indigo-700 shadow-indigo-300'
+                    }`}>
+                        {role === UserRole.ADMIN ? <Lock className="text-white" size={28} /> : <span className="text-white text-3xl font-bold">F</span>}
+                    </div>
+                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+                        {role === UserRole.ADMIN ? 'Admin Console' : 'Resident Portal'}
+                    </h1>
+                    <p className="text-slate-500 font-medium mt-1">
+                        {role === UserRole.ADMIN ? 'Enter credentials to manage.' : 'Sign in to access your dashboard.'}
+                    </p>
+                </div>
 
-          {/* Discreet Role Switcher */}
-          <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-             {role === UserRole.ADMIN ? (
-                 <button 
-                    onClick={toggleRole}
-                    className="text-xs font-medium text-slate-300 hover:text-indigo-600 transition-colors"
-                 >
-                    User Access
-                 </button>
-             ) : (
-                 <button 
-                    onClick={toggleRole}
-                    className="flex items-center justify-center gap-2 mx-auto text-sm font-semibold text-indigo-600 hover:text-indigo-700 transition-colors"
-                 >
-                    <Lock size={16} />
-                    Back to Admin Login
-                 </button>
-             )}
-          </div>
-        </div>
+                <form onSubmit={handleSubmit} className="space-y-5">
+                    <Input
+                    label={role === UserRole.ADMIN ? "Admin Email" : "Registered Phone Number"}
+                    type={role === UserRole.ADMIN ? "email" : "tel"}
+                    placeholder={role === UserRole.ADMIN ? "admin@freshbites.com" : "10-digit mobile number"}
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    required
+                    autoFocus
+                    />
+                    
+                    {role === UserRole.ADMIN && (
+                    <Input
+                        label="Password"
+                        type="password"
+                        placeholder="••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                    />
+                    )}
+
+                    {error && (
+                    <div className="text-rose-600 text-sm bg-rose-50 p-3 rounded-xl border border-rose-100 flex items-center font-medium">
+                        <span className="w-1.5 h-1.5 bg-rose-500 rounded-full mr-2"></span>
+                        {error}
+                    </div>
+                    )}
+
+                    <Button type="submit" className={`w-full text-base py-3 ${role === UserRole.ADMIN ? 'bg-slate-800 hover:bg-slate-900 shadow-slate-200' : ''}`} disabled={isLoading}>
+                    {isLoading ? (
+                        <div className="flex items-center justify-center space-x-2">
+                            <Loader2 size={20} className="animate-spin" />
+                            <span>Verifying...</span>
+                        </div>
+                    ) : (
+                        role === UserRole.ADMIN ? 'Authenticate' : 'Access Portal'
+                    )}
+                    </Button>
+                </form>
+            </div>
+        )}
+
       </div>
     </div>
   );
