@@ -14,8 +14,13 @@ const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0); // Used to trigger re-renders
 
-  // Month Filter State (Default to current month YYYY-MM)
-  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
+  // Helper to ensure consistent Local YYYY-MM format
+  const getLocalMonthKey = (date: Date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  // Month Filter State (Default to current local month)
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => getLocalMonthKey(new Date()));
 
   useEffect(() => {
     const load = async () => {
@@ -50,15 +55,19 @@ const AdminDashboard: React.FC = () => {
       const periodPayments = messStore.payments.filter(p => {
           if (p.status !== 'verified') return false;
           if (isAllTime) return true;
-          return p.date.startsWith(selectedMonth);
+          
+          // Convert stored UTC/ISO string to Local Date Object for correct month matching
+          const pDate = new Date(p.date);
+          return getLocalMonthKey(pDate) === selectedMonth;
       });
       const periodCollections = periodPayments.reduce((sum, p) => sum + Number(p.amount), 0);
 
       // 2. Calculate Billings (Assignments) for the period
       const periodAssignments = messStore.assignments.filter(a => {
           if (isAllTime) return true;
-          // We consider the billing to happen in the month the plan starts
-          return a.start_date.startsWith(selectedMonth);
+          // Billings are attributed to the month the plan starts
+          const aDate = new Date(a.start_date);
+          return getLocalMonthKey(aDate) === selectedMonth;
       });
       const periodBillings = periodAssignments.reduce((sum, a) => sum + Number(a.charge), 0);
 
@@ -72,13 +81,16 @@ const AdminDashboard: React.FC = () => {
 
   }, [selectedMonth, stats, refreshKey]); // Recalculate when month changes or data refreshes
 
-  // Generate Month Options (Last 12 Months + All Time)
+  // Generate Month Options (Current Calendar Year Jan-Dec)
   const monthOptions = useMemo(() => {
       const options = [{ value: 'all', label: 'All Time Total' }];
       const today = new Date();
-      for (let i = 0; i < 12; i++) {
-          const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-          const value = d.toISOString().slice(0, 7); // YYYY-MM
+      const currentYear = today.getFullYear();
+      
+      // Generate options for the full current year (Jan to Dec)
+      for (let m = 0; m < 12; m++) {
+          const d = new Date(currentYear, m, 1);
+          const value = getLocalMonthKey(d);
           const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
           options.push({ value, label });
       }

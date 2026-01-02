@@ -21,7 +21,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   // Pre-load data on mount to minimize waiting time and check connection
   useEffect(() => {
     const checkDb = async () => {
-      await messStore.init();
+      try {
+        await messStore.init();
+      } catch (e) {
+        // Init errors are handled internally in store, but we catch here just in case
+        console.warn("Store init check failed", e);
+      }
       setDbStatus(messStore.isSupabaseConfigured ? 'connected' : 'offline');
     };
     checkDb();
@@ -33,6 +38,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setIsLoading(true);
 
     try {
+        // CRITICAL: Wait for initialization to complete to know if we are online/offline
+        // This prevents "Failed to fetch" errors if user clicks login before connection check finishes
+        if (messStore.isLoading) {
+            await messStore.init();
+        }
+
+        // Update status in case it changed during init
+        setDbStatus(messStore.isSupabaseConfigured ? 'connected' : 'offline');
+
         if (role === UserRole.ADMIN) {
             // 1. Check Hardcoded Demo Credentials
             if (identifier === 'admin@messpro.com' && password === 'admin') {
@@ -44,15 +58,20 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             // 2. Check Supabase (if connected)
             if (messStore.isSupabaseConfigured) {
                 // A. Try Standard Supabase Auth (Users)
-                const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-                    email: identifier,
-                    password: password
-                });
+                try {
+                    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+                        email: identifier,
+                        password: password
+                    });
 
-                if (!authError && authData.user) {
-                    onLogin(UserRole.ADMIN, authData.user.id, authData.user.email || 'Admin');
-                    window.location.hash = '/';
-                    return;
+                    if (!authError && authData.user) {
+                        onLogin(UserRole.ADMIN, authData.user.id, authData.user.email || 'Admin');
+                        window.location.hash = '/';
+                        return;
+                    }
+                } catch (authErr) {
+                    console.warn("Supabase Auth Error:", authErr);
+                    // Don't throw here, try the custom table fallback
                 }
 
                 // B. Try custom 'admins' table (Fallback for manually inserted rows)
@@ -70,14 +89,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                          return;
                     }
                 } catch (err) {
-                    // Ignore errors if table doesn't exist
+                    console.warn("Custom Admin Table Error:", err);
+                    // Ignore errors if table doesn't exist or fetch failed
                 }
             }
 
             setError('Invalid Email or Password.');
         } else {
             // Student Login Logic
-            await messStore.init();
+            if (messStore.isLoading) await messStore.init();
 
             // Sanitize input (remove spaces, match string types)
             const cleanPhone = identifier.trim();
@@ -87,8 +107,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 onLogin(UserRole.STUDENT, student.id, student.name);
                 window.location.hash = '/';
             } else {
-                if (messStore.students.length === 0 && dbStatus === 'connected') {
+                if (messStore.students.length === 0 && messStore.isSupabaseConfigured) {
                      setError('Registry is empty. Please ask Admin to add students via dashboard.');
+                } else if (messStore.students.length === 0) {
+                     setError('Demo mode active but no data seeded. Try reloading.');
                 } else {
                      setError(`Phone number "${cleanPhone}" not found.`);
                 }
