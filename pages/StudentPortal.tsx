@@ -41,6 +41,7 @@ const StudentPortal: React.FC<StudentPortalProps> = ({ user }) => {
   const [transactionId, setTransactionId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [validationError, setValidationError] = useState('');
 
   // Update input amount when balance changes
   useEffect(() => {
@@ -69,13 +70,24 @@ const StudentPortal: React.FC<StudentPortalProps> = ({ user }) => {
 
   const handleManualPaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!transactionId.trim()) return;
+    setValidationError('');
+    
+    const cleanTrxId = transactionId.trim();
+
+    if (!cleanTrxId) return;
+
+    // VALIDATION 1: UPI UTR must be exactly 12 digits
+    const utrRegex = /^\d{12}$/;
+    if (!utrRegex.test(cleanTrxId)) {
+        setValidationError("Invalid Format: UPI Reference Numbers must be exactly 12 digits (numeric only). Please check your payment app history.");
+        return;
+    }
 
     setIsSubmitting(true);
     const amount = parseFloat(payAmount);
 
     // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 800));
 
     try {
         // Record payment in store as PENDING
@@ -84,7 +96,7 @@ const StudentPortal: React.FC<StudentPortalProps> = ({ user }) => {
             amount: amount,
             date: new Date().toISOString(),
             mode: 'upi', 
-            transaction_id: transactionId.trim(),
+            transaction_id: cleanTrxId,
             notes: 'Manual User Submission',
             status: 'pending' // Important: Mark as pending for Admin approval
         });
@@ -95,7 +107,7 @@ const StudentPortal: React.FC<StudentPortalProps> = ({ user }) => {
         alert("Payment Recorded! Admin will verify the Transaction ID shortly.");
 
     } catch (error: any) {
-        alert("Error recording payment: " + error.message);
+        setValidationError(error.message);
     } finally {
         setIsSubmitting(false);
     }
@@ -194,24 +206,26 @@ const StudentPortal: React.FC<StudentPortalProps> = ({ user }) => {
                       value={payAmount} 
                       onChange={e => setPayAmount(e.target.value)} 
                       min="1"
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-bold"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-bold disabled:opacity-50"
+                      disabled={true}
                      />
                    </div>
                    <div className="flex items-end">
                      <Button 
                       variant="primary" 
-                      onClick={() => setIsPaymentModalOpen(true)}
-                      disabled={!payAmount || parseFloat(payAmount) <= 0}
-                      className="h-[42px] px-6 shadow-none"
+                      onClick={() => {}} // Disabled action
+                      disabled={true}
+                      className="h-[42px] px-6 shadow-none !bg-slate-700 !border-slate-600 !text-slate-400 cursor-not-allowed"
+                      title="Online payments are currently disabled. Please pay in cash to Admin."
                      >
-                        <span>Pay Now</span>
+                        <span>Disabled</span>
                      </Button>
                    </div>
                  </div>
                  
                  <div className="flex items-center gap-1.5 text-[10px] text-slate-500 justify-center opacity-70">
-                    <ShieldCheck size={12} className="text-emerald-500" />
-                    <span>Secure UPI Payment</span>
+                    <ShieldCheck size={12} className="text-slate-600" />
+                    <span>Pay at Office</span>
                  </div>
                </div>
             </div>
@@ -325,10 +339,10 @@ const StudentPortal: React.FC<StudentPortalProps> = ({ user }) => {
         </div>
       </Card>
 
-      {/* UPI Payment Modal */}
+      {/* UPI Payment Modal (Code Kept but Unreachable) */}
       <Modal 
         isOpen={isPaymentModalOpen} 
-        onClose={() => setIsPaymentModalOpen(false)} 
+        onClose={() => {setIsPaymentModalOpen(false); setValidationError('');}} 
         title="Pay via UPI"
       >
         <div className="space-y-6">
@@ -371,15 +385,26 @@ const StudentPortal: React.FC<StudentPortalProps> = ({ user }) => {
             <form onSubmit={handleManualPaymentSubmit} className="space-y-4 pt-4 border-t border-slate-100">
                 <div>
                     <h4 className="text-sm font-bold text-slate-900 mb-1">Verify Payment</h4>
-                    <p className="text-xs text-slate-500 mb-3">After paying, paste the Transaction ID / UTR Number below.</p>
+                    <p className="text-xs text-slate-500 mb-3">After paying, paste the 12-digit UPI Reference Number below.</p>
                     <Input 
                         placeholder="e.g. 334512345678" 
                         value={transactionId} 
-                        onChange={(e) => setTransactionId(e.target.value)}
+                        onChange={(e) => {
+                            setTransactionId(e.target.value);
+                            setValidationError('');
+                        }}
                         required
-                        label="Transaction ID / Ref No."
+                        label="Transaction Ref No / UTR"
+                        maxLength={12}
                     />
                 </div>
+                
+                {validationError && (
+                    <div className="p-3 bg-rose-50 border border-rose-100 rounded-lg flex gap-2 items-start text-xs text-rose-600">
+                        <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                        <span>{validationError}</span>
+                    </div>
+                )}
 
                 <div className="bg-blue-50 p-3 rounded-lg flex gap-2 items-start">
                     <CheckCircle className="text-blue-600 shrink-0 mt-0.5" size={16} />

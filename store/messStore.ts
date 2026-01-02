@@ -352,7 +352,28 @@ class MessStore {
     // Default to verified if not specified (for admin actions), but respect provided status (for student actions)
     const paymentStatus = payment.status || 'verified';
     
+    // Check for duplicate transaction ID locally first (faster feedback)
+    if (payment.transaction_id) {
+        const isDuplicate = this.payments.some(p => p.transaction_id === payment.transaction_id);
+        if (isDuplicate) {
+            throw new Error(`Transaction ID '${payment.transaction_id}' has already been submitted.`);
+        }
+    }
+
     if (this.isSupabaseConfigured) {
+      // Secondary check against Database for duplicates to avoid constraint error crashing the UI
+      if (payment.transaction_id) {
+          const { data: existing } = await supabase
+              .from('payments')
+              .select('id')
+              .eq('transaction_id', payment.transaction_id)
+              .maybeSingle();
+          
+          if (existing) {
+              throw new Error(`Transaction ID '${payment.transaction_id}' already exists in the system.`);
+          }
+      }
+
       const { data, error } = await supabase.from('payments').insert([{
         student_id: payment.student_id,
         amount: payment.amount,
@@ -366,6 +387,10 @@ class MessStore {
         // Explicitly check for column missing error which happens when schema is outdated
         if (error.message && (error.message.includes('status') || error.message.includes('column'))) {
             throw new Error("Database Error: The 'status' column is missing in 'payments' table. Please ask Admin to run the update SQL.");
+        }
+        // Check for unique constraint violation (code 23505 in Postgres)
+        if (error.code === '23505') {
+            throw new Error("This Transaction ID has already been used.");
         }
         throw error;
       }
