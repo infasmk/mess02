@@ -16,9 +16,9 @@ class MessStore {
     this.init();
   }
 
-  async init() {
-    // Return existing promise if already loading to prevent race conditions
-    if (this.isLoading && this.initPromise) return this.initPromise;
+  async init(force = false) {
+    // Return existing promise if already loading to prevent race conditions, unless forced
+    if (!force && this.isLoading && this.initPromise) return this.initPromise;
 
     this.isLoading = true;
     

@@ -16,8 +16,9 @@ const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     const load = async () => {
-      if (messStore.isLoading) {
-        await messStore.init();
+      // Force init on refreshKey change > 0, otherwise standard lazy load
+      if (messStore.isLoading || refreshKey > 0) {
+        await messStore.init(refreshKey > 0);
       }
       setStats(messStore.getStats());
       setActivityLog(messStore.getRecentActivity());
@@ -38,7 +39,7 @@ const AdminDashboard: React.FC = () => {
 
   const handleRefresh = async () => {
       setLoading(true);
-      await messStore.init(); // Re-fetch from DB
+      // Incrementing key triggers useEffect which calls init(true)
       setRefreshKey(k => k + 1);
   };
 

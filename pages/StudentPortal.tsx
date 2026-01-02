@@ -3,7 +3,7 @@ import { CurrentUser } from '../types.ts';
 import { messStore } from '../store/messStore.ts';
 import { Card, Button, Badge, Modal, Input } from '../components/UI.tsx';
 import { formatCurrency, formatDate } from '../utils/helpers.ts';
-import { History, Calendar, CheckCircle, AlertTriangle, ShieldCheck, QrCode, Copy, Smartphone, Check, Clock } from 'lucide-react';
+import { History, Calendar, CheckCircle, AlertTriangle, ShieldCheck, QrCode, Copy, Smartphone, Check, Clock, Loader2, Sparkles } from 'lucide-react';
 
 interface StudentPortalProps {
   user: CurrentUser;
@@ -12,6 +12,22 @@ interface StudentPortalProps {
 const StudentPortal: React.FC<StudentPortalProps> = ({ user }) => {
   // Use a reducer to force update since the store isn't reactive by default
   const [refreshKey, forceUpdate] = useReducer((x) => x + 1, 0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load data on mount to ensure data exists after reload
+  useEffect(() => {
+    const loadData = async () => {
+        setIsLoading(true);
+        try {
+            await messStore.init();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    loadData();
+  }, []);
 
   // Data fetching (runs on every render/refreshKey change)
   const balance = messStore.getStudentBalance(user.id);
@@ -33,7 +49,7 @@ const StudentPortal: React.FC<StudentPortalProps> = ({ user }) => {
     } else {
       setPayAmount(''); 
     }
-  }, [balance, refreshKey]);
+  }, [balance, refreshKey, isLoading]);
 
   // --- UPI CONFIGURATION ---
   const ADMIN_UPI_ID = "ifu.infas-1@okicici"; 
@@ -100,8 +116,33 @@ const StudentPortal: React.FC<StudentPortalProps> = ({ user }) => {
   const daysRemaining = activeAssignment ? getDaysRemaining(activeAssignment.end_date) : -999;
   const showExpiryWarning = activeAssignment && daysRemaining <= 2 && daysRemaining >= 0;
 
+  if (isLoading) {
+      return (
+          <div className="flex flex-col items-center justify-center min-h-[50vh]">
+              <Loader2 className="animate-spin text-indigo-600 mb-2" size={32} />
+              <p className="text-slate-500 font-medium">Loading your portal...</p>
+          </div>
+      );
+  }
+
   return (
     <div className="space-y-6">
+      
+      {/* Welcome Banner */}
+      <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 rounded-3xl p-6 text-white shadow-lg shadow-indigo-200 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+          <div className="relative z-10">
+              <div className="flex items-center gap-2 mb-2 opacity-90">
+                  <Sparkles size={18} className="text-yellow-300" />
+                  <span className="text-sm font-semibold tracking-wide uppercase">Welcome Back</span>
+              </div>
+              <h1 className="text-3xl font-bold mb-1">Hi, {user.name}</h1>
+              <p className="text-indigo-100 max-w-lg text-sm leading-relaxed">
+                  Hope you're having a great day! Check your meal plan status and manage your payments below.
+              </p>
+          </div>
+      </div>
+
       {/* Expiry Warning Banner */}
       {showExpiryWarning && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-4 shadow-sm animate-fade-in relative overflow-hidden">

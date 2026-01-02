@@ -66,9 +66,11 @@ export const getDerivedStatus = (activeAssignment: Assignment | undefined, balan
 
   const daysLeft = getDaysRemaining(activeAssignment.end_date);
 
-  // If assignment is technically active in DB but date has passed (should be processed as expired)
+  // Expired Logic
   if (daysLeft < 0) {
-    if (balance > 0) return { label: 'Overdue', color: 'rose', isOverdue: true };
+    if (balance > 10) { // Tolerance of 10rs
+        return { label: 'Overdue', color: 'rose', isOverdue: true };
+    }
     return { label: 'Expired', color: 'slate', isOverdue: false };
   }
 
