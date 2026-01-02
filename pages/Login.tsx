@@ -3,14 +3,15 @@ import { UserRole } from '../types.ts';
 import { Button, Input } from '../components/UI.tsx';
 import { messStore } from '../store/messStore.ts';
 import { supabase } from '../services/supabaseClient.ts';
-import { Loader2, Wifi, WifiOff, Database } from 'lucide-react';
+import { Loader2, Wifi, WifiOff, Database, Lock, GraduationCap } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (role: UserRole, id: string, name: string) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const [role, setRole] = useState<UserRole>(UserRole.ADMIN);
+  // CHANGED: Default to STUDENT instead of ADMIN
+  const [role, setRole] = useState<UserRole>(UserRole.STUDENT);
   const [identifier, setIdentifier] = useState(''); // Email or Phone
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -101,6 +102,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
   };
 
+  const toggleRole = () => {
+      setRole(prev => prev === UserRole.ADMIN ? UserRole.STUDENT : UserRole.ADMIN);
+      setError('');
+      setIdentifier('');
+      setPassword('');
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6 relative overflow-hidden">
       {/* Background Decor */}
@@ -127,11 +135,17 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-           <div className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-3xl mx-auto flex items-center justify-center mb-6 shadow-xl shadow-indigo-300 transform rotate-3 hover:rotate-6 transition-transform">
-            <span className="text-white text-4xl font-bold">M</span>
+           <div className={`w-20 h-20 rounded-3xl mx-auto flex items-center justify-center mb-6 shadow-xl transform rotate-3 hover:rotate-6 transition-all duration-500 ${
+               role === UserRole.ADMIN ? 'bg-gradient-to-br from-slate-700 to-slate-900 shadow-slate-300' : 'bg-gradient-to-br from-indigo-600 to-indigo-700 shadow-indigo-300'
+           }`}>
+            {role === UserRole.ADMIN ? <Lock className="text-white" size={32} /> : <span className="text-white text-4xl font-bold">M</span>}
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Welcome Back</h1>
-          <p className="text-slate-500 font-medium mt-2">Sign in to manage your mess.</p>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+              {role === UserRole.ADMIN ? 'Admin Console' : 'Welcome Back'}
+          </h1>
+          <p className="text-slate-500 font-medium mt-2">
+              {role === UserRole.ADMIN ? 'Secure access for management.' : 'Sign in to manage your meals.'}
+          </p>
         </div>
 
         <div className="bg-white p-8 rounded-3xl shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] border border-slate-100">
@@ -149,33 +163,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
              </div>
           )}
 
-          <div className="flex p-1 bg-slate-50 rounded-xl mb-8 border border-slate-100">
-            <button
-              onClick={() => { setRole(UserRole.ADMIN); setError(''); }}
-              className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${
-                role === UserRole.ADMIN ? 'bg-white shadow-sm text-indigo-700 ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Admin
-            </button>
-            <button
-              onClick={() => { setRole(UserRole.STUDENT); setError(''); }}
-              className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${
-                role === UserRole.STUDENT ? 'bg-white shadow-sm text-indigo-700 ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Student
-            </button>
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-5">
             <Input
-              label={role === UserRole.ADMIN ? "Email Address" : "Registered Phone"}
+              label={role === UserRole.ADMIN ? "Admin Email" : "Registered Phone Number"}
               type={role === UserRole.ADMIN ? "email" : "tel"}
-              placeholder={role === UserRole.ADMIN ? "name@example.com" : "10-digit mobile number"}
+              placeholder={role === UserRole.ADMIN ? "admin@messpro.com" : "10-digit mobile number"}
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               required
+              autoFocus
             />
             
             {role === UserRole.ADMIN && (
@@ -196,17 +192,37 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </div>
             )}
 
-            <Button type="submit" className="w-full text-base py-3" disabled={isLoading}>
+            <Button type="submit" className={`w-full text-base py-3 ${role === UserRole.ADMIN ? 'bg-slate-800 hover:bg-slate-900 shadow-slate-200' : ''}`} disabled={isLoading}>
               {isLoading ? (
                   <div className="flex items-center justify-center space-x-2">
                       <Loader2 size={20} className="animate-spin" />
                       <span>Verifying...</span>
                   </div>
               ) : (
-                  role === UserRole.ADMIN ? 'Sign In' : 'Access Portal'
+                  role === UserRole.ADMIN ? 'Authenticate' : 'Access Portal'
               )}
             </Button>
           </form>
+
+          {/* Discreet Role Switcher */}
+          <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+             {role === UserRole.STUDENT ? (
+                 <button 
+                    onClick={toggleRole}
+                    className="text-xs font-medium text-slate-300 hover:text-indigo-600 transition-colors"
+                 >
+                    Staff Administration
+                 </button>
+             ) : (
+                 <button 
+                    onClick={toggleRole}
+                    className="flex items-center justify-center gap-2 mx-auto text-sm font-semibold text-indigo-600 hover:text-indigo-700 transition-colors"
+                 >
+                    <GraduationCap size={16} />
+                    Back to Student Login
+                 </button>
+             )}
+          </div>
         </div>
       </div>
     </div>
